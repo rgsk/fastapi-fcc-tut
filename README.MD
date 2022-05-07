@@ -28,3 +28,11 @@ To run the project
 To run project while listening to changes
 
     uvicorn main:app --reload
+
+To access swagger ui docs
+
+    http://127.0.0.1:8000/docs
+
+To access redoc docs
+
+        http://127.0.0.1:8000/redoc
