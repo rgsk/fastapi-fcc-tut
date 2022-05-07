@@ -25,6 +25,8 @@ To run the project
 
     uvicorn main:app
 
+main is file name eg `main.py`, app is instance name intialized in code like `app = FastAPI() `
+
 To run project while listening to changes
 
     uvicorn main:app --reload
@@ -35,4 +37,4 @@ To access swagger ui docs
 
 To access redoc docs
 
-        http://127.0.0.1:8000/redoc
+    http://127.0.0.1:8000/redoc
