@@ -1,21 +1,38 @@
-from fastapi import FastAPI
+from typing import Optional
+from fastapi import Body, FastAPI
+from pydantic import BaseModel
 
 app = FastAPI()
 
 
+class Post(BaseModel):
+    title: str
+    content: str
+    published: bool = True
+    rating: Optional[int] = None
+
+
 @app.get('/')
 def root():
-    return {"message": "Hello World changed 12312312"}
+    return {"message": "Hello World"}
 
 
-@app.get('/login')
-def login():
-    return {"message": "Within a year"}
-
-
-posts = [{"id": 1, "text": "first post"}]
+posts = []
 
 
 @app.get('/posts')
 def get_posts():
     return posts
+
+
+@app.post('/posts')
+def create_post(post: Post):
+    created_post = post.dict()
+    created_post['id'] = len(posts)
+    posts.append(created_post)
+    return created_post
+
+
+@app.delete('/posts')
+def delete_post():
+    return {}
