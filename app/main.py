@@ -1,10 +1,27 @@
-from optparse import Option
-from typing import List, Optional
+from turtle import home, pos, pu
+from typing import Optional
 from fastapi import FastAPI, Response, status, HTTPException
 from pydantic import BaseModel
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
+# we are 4:31 in video
 
 app = FastAPI()
+
+try:
+    conn = psycopg2.connect(
+        host="localhost",
+        database="fastapi_fcc",
+        user="postgres",
+        password="postgres",
+        cursor_factory=RealDictCursor
+    )
+    cursor = conn.cursor()
+    print('Database connection successfull')
+except Exception as error:
+    print('Connecting to database failed')
+    print('Error: ', error)
 
 
 class Post(BaseModel):
@@ -13,10 +30,12 @@ class Post(BaseModel):
     content: str
     published: bool = True
     rating: Optional[int] = None
+    created_at: str
 
 
 class CreatePostInput (Post):
     id: None = None
+    created_at: None = None
 
 
 class UpdatePostInput(BaseModel):
@@ -36,6 +55,10 @@ posts = []
 
 @app.get('/posts')
 def get_posts():
+    cursor.execute("""
+        SELECT * FROM posts
+    """)
+    posts = cursor.fetchall()
     return posts
 
 
@@ -48,45 +71,86 @@ def get_latest_post():
                         detail=f'posts are empty')
 
 
+def get_post_by_id(id: int):
+    cursor.execute("""
+        SELECT * from posts 
+        WHERE id = %s
+    """, (id,))
+    post = cursor.fetchone()
+    return post
+
+
 @app.get('/posts/{id}')
 def get_post(id: int):
-    for post in posts:
-        if post['id'] == id:
-            return post
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f'no post found with id {id}')
+    post = get_post_by_id(id)
+    if post != None:
+        return post
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f'no post found with id {id}')
 
 
 @app.post('/posts', status_code=status.HTTP_201_CREATED)
 def create_post(post: CreatePostInput):
-    created_post = post.dict()
-    created_post['id'] = len(posts)
-    posts.append(created_post)
-    return created_post
+    cursor.execute("""
+        INSERT INTO posts 
+        (title, content, published, rating)
+        VALUES
+        (%s, %s, %s, %s)
+        RETURNING *
+    """, (
+        post.title,
+        post.content,
+        post.published,
+        post.rating
+    ))
+    conn.commit()
+    new_post = cursor.fetchone()
+    return new_post
 
 
 @app.patch('/posts/{id}')
 def update_post(id: int, data: UpdatePostInput):
-    for p in posts:
-        if p['id'] == id:
-            if data.title != None:
-                p['title'] = data.title
-            if data.content != None:
-                p['content'] = data.content
-            if data.published != None:
-                p['published'] = data.published
-            if data.rating != None:
-                p['rating'] = data.rating
-            return p
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f'no post found with id {id}')
+    post_to_update = get_post_by_id(id)
+    if post_to_update == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f'no post found with id {id}')
+
+    if data.title != None:
+        post_to_update['title'] = data.title
+    if data.content != None:
+        post_to_update['content'] = data.content
+    if data.published != None:
+        post_to_update['published'] = data.published
+    if data.rating != None:
+        post_to_update['rating'] = data.rating
+
+    cursor.execute("""
+        UPDATE posts
+        SET 
+        title=%s, content=%s, published=%s, rating=%s
+        WHERE
+        id=%s
+        RETURNING *
+    """, (post_to_update['title'], post_to_update['content'], post_to_update['published'],
+          post_to_update['rating'], id
+          ))
+    conn.commit()
+    updated_post = cursor.fetchone()
+    return updated_post
 
 
 @app.delete('/posts/{id}')
 def delete_post(id: int):
-    for i, p in enumerate(posts):
-        if p['id'] == id:
-            posts.pop(i)
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
+    cursor.execute("""
+        DELETE FROM posts
+        WHERE id = %s 
+        RETURNING *
+    """, (id,))
+    conn.commit()
+    post = cursor.fetchone()
+    if post != None:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                         detail=f'no post found with id {id}')
